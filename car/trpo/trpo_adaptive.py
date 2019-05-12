@@ -205,7 +205,7 @@ class TRPO():
         return action, action_dist_mu, action_dist_logstd
 
     def rollout(self):
-        # Compute lambda
+        # Set tuning parameters to obtain adaptive regularization weight
         lambda_store = np.zeros(int(self.args.timesteps_per_batch))
         lambda_max = 6
         factor = 0.3
@@ -218,6 +218,8 @@ class TRPO():
             self.num_epi += 1
             # print('%d episode starts' % self.num_epi)
             obs, action, rewards, done, action_dist_mu, action_dist_logstd, reward_diff = [], [], [], [], [], [], []
+
+            # Baseline reward using only control prior
             s0 = self.env.reset_inc()
             sp = np.copy(s0)
             reward_prior = 0.
@@ -236,7 +238,7 @@ class TRPO():
                 prev_obs = np.squeeze(prev_obs)
                 prev_obs_expanded = np.expand_dims(prev_obs, 0)
 
-                # Agent take actions and receives sampled action and action distribution parameters
+                # Obtain regularization weight using TD-error
                 if (i > 0 and self.num_epi > 40):
                     # Obtain TD-error
                     base_v = self.gae.predict(old_obs[np.newaxis,:])

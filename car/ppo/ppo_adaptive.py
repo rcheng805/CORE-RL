@@ -250,6 +250,7 @@ if __name__ == '__main__':
     buffer_s, buffer_a, buffer_r, buffer_v, buffer_terminal = [], [], [], [], []
     rolling_r = RunningStats()
 
+    # Get prior and set tuning parameters for adaptive regularization weight
     prior = BasePrior()
     lambda_store = np.zeros(BATCH + 1)
     lambda_all = np.zeros(EP_MAX + 1)
@@ -260,6 +261,7 @@ if __name__ == '__main__':
 
     for episode in range(EP_MAX + 1):
 
+        # Baseline reward using only control prior
         sp = env.reset_inc()
         reward_prior = 0.
         while True:
@@ -276,6 +278,7 @@ if __name__ == '__main__':
             a, v = ppo.evaluate_state(s)
             s = np.squeeze(s)[np.newaxis,:]
 
+            # Obtain the regularization weight based on TD-error
             if (t > 0 and episode > 200):
                 # Obtain TD-error
                 _, base_v = ppo.evaluate_state(s_old)
@@ -319,6 +322,7 @@ if __name__ == '__main__':
             buffer_terminal.append(terminal)
             ep_a.append(a)
 
+            # Roll out control action from mixed policy
             a_prior = env.getPrior()
             act = a/(1+lambda_actual) + (lambda_actual/(1+lambda_actual))*a_prior
 
@@ -368,25 +372,3 @@ if __name__ == '__main__':
 
     savemat('data_ppo_adaptive_v6_' + datetime.now().strftime("%y-%m-%d-%H-%M") + '.mat',dict(data_total=reward_total, data_diff=reward_diff))
 
-
-    # Run trained policy
-    #env = gym.make(ENVIRONMENT)
-    env = allCars()
-    for i in range(5):
-        s = env.reset()
-        ep_r, ep_t = 0, 0
-        while True:
-            env.render()
-            #s = np.squeeze(s)[np.newaxis,:]
-            s = np.squeeze(s)
-            a, v = ppo.evaluate_state(s, stochastic=False)
-            a_prior = prior.getControl_h(s)
-            act = a/(1+lambda_mix) + (lambda_mix/(1+lambda_mix))*a_prior
-            if not ppo.discrete:
-                act = np.clip(act, env.action_space.low, env.action_space.high)
-            s, r, terminal, _ = env.step(act)
-            ep_r += r
-            ep_t += 1
-            if terminal:
-                print("Reward: %.2f" % ep_r, '| Steps: %i' % ep_t)
-                break

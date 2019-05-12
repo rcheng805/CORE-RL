@@ -211,6 +211,8 @@ class TRPO():
             self.num_epi += 1
             # print('%d episode starts' % self.num_epi)
             obs, action, rewards, done, action_dist_mu, action_dist_logstd, reward_diff = [], [], [], [], [], [], []
+
+            # Baseline reward using only control prior
             s0 = self.env.reset_inc()
             sp = np.copy(s0)
             reward_prior = 0.
@@ -227,9 +229,9 @@ class TRPO():
                 # Make 'batch size' axis
                 prev_obs = np.squeeze(prev_obs)
                 prev_obs_expanded = np.expand_dims(prev_obs, 0)
-                # Agent take actions and receives sampled action and action distribution parameters
+
+                # Set regularization weight and get control prior
                 lambda_mix = 15.
-                # Prior control
                 a_prior = self.env.getPrior()
 
                 #All has shape of [1, action size]

@@ -27,11 +27,6 @@ def main():
 	args = parser.parse_args()
 	print(args)
     
-	#if not os.path.exists(args.checkpoint_dir):
-	#	os.mkdir(args.checkpoint_dir)
-	#if not os.path.exists(args.log_dir):
-	#	os.mkdir(args.log_dir)
-        
 	config = tf.ConfigProto()
 	config.log_device_placement = False
 	config.gpu_options.allow_growth = True

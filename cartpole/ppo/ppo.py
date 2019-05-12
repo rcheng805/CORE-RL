@@ -238,7 +238,6 @@ if __name__ == '__main__':
     SUMMARY_DIR = os.path.join(OUTPUT_RESULTS_DIR, "PPO", ENVIRONMENT, TIMESTAMP)
 
     env = gym.make(ENVIRONMENT)
-    #env = wrappers.Monitor(env, os.path.join(SUMMARY_DIR, ENVIRONMENT), video_callable=None)
     ppo = PPO(env, SUMMARY_DIR, gpu=True)
 
     if MODEL_RESTORE_PATH is not None:
@@ -248,14 +247,17 @@ if __name__ == '__main__':
     buffer_s, buffer_a, buffer_r, buffer_v, buffer_terminal = [], [], [], [], []
     rolling_r = RunningStats()
 
+    # Initialize control prior
     [A,B] = get_linear_dynamics()
     prior = BasePrior(A,B)
+    # Set fixed regularization weight
     lambda_mix = 4.
 
     reward_total, reward_diff = [], []
 
     for episode in range(EP_MAX + 1):
 
+        # Baseline reward using only control prior
         s0 = env.reset()
         sp = np.copy(s0)
         reward_prior = 0.
@@ -305,6 +307,7 @@ if __name__ == '__main__':
             buffer_terminal.append(terminal)
             ep_a.append(a)
 
+            # Roll out control prior using mixed policy
             a_prior = prior.getControl_h(s)
             act = a/(1+lambda_mix) + (lambda_mix/(1+lambda_mix))*a_prior
 

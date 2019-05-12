@@ -238,9 +238,7 @@ if __name__ == '__main__':
     TIMESTAMP = datetime.now().strftime("%Y%m%d-%H%M%S")
     SUMMARY_DIR = os.path.join(OUTPUT_RESULTS_DIR, "PPO", ENVIRONMENT, TIMESTAMP)
 
-    #env = gym.make(ENVIRONMENT)
     env = allCars()
-    #env = wrappers.Monitor(env, os.path.join(SUMMARY_DIR, ENVIRONMENT), video_callable=None)
     ppo = PPO(env, SUMMARY_DIR, gpu=True)
 
     if MODEL_RESTORE_PATH is not None:
@@ -250,13 +248,18 @@ if __name__ == '__main__':
     buffer_s, buffer_a, buffer_r, buffer_v, buffer_terminal = [], [], [], [], []
     rolling_r = RunningStats()
 
+    # Initialize control prior
     prior = BasePrior()
+
+    # Set regularization weight
     lambda_mix = 5.
 
     reward_total, reward_diff = [], []
 
+    # Run PPO algorithm
     for episode in range(EP_MAX + 1):
 
+        # Obtain baseline reward using only control prior
         sp = env.reset_inc()
         reward_prior = 0.
         while True:
@@ -304,6 +307,7 @@ if __name__ == '__main__':
             buffer_terminal.append(terminal)
             ep_a.append(a)
 
+            # Rollout out control action with mixed policy
             a_prior = env.getPrior()
             act = a/(1+lambda_mix) + (lambda_mix/(1+lambda_mix))*a_prior
 
@@ -353,26 +357,3 @@ if __name__ == '__main__':
     env.close()
 
     savemat('data5_ppo_v1_' + datetime.now().strftime("%y-%m-%d-%H-%M") + '.mat',dict(data_total=reward_total, data_diff=reward_diff))
-
-
-    # Run trained policy
-    #env = gym.make(ENVIRONMENT)
-    env = allCars()
-    for i in range(5):
-        s = env.reset()
-        ep_r, ep_t = 0, 0
-        while True:
-            env.render()
-            #s = np.squeeze(s)[np.newaxis,:]
-            s = np.squeeze(s)
-            a, v = ppo.evaluate_state(s, stochastic=False)
-            a_prior = prior.getControl_h(s)
-            act = a/(1+lambda_mix) + (lambda_mix/(1+lambda_mix))*a_prior
-            if not ppo.discrete:
-                act = np.clip(act, env.action_space.low, env.action_space.high)
-            s, r, terminal, _ = env.step(act)
-            ep_r += r
-            ep_t += 1
-            if terminal:
-                print("Reward: %.2f" % ep_r, '| Steps: %i' % ep_t)
-                break

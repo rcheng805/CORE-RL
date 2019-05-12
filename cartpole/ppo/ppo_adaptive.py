@@ -238,7 +238,6 @@ if __name__ == '__main__':
     SUMMARY_DIR = os.path.join(OUTPUT_RESULTS_DIR, "PPO", ENVIRONMENT, TIMESTAMP)
 
     env = gym.make(ENVIRONMENT)
-    #env = wrappers.Monitor(env, os.path.join(SUMMARY_DIR, ENVIRONMENT), video_callable=None)
     ppo = PPO(env, SUMMARY_DIR, gpu=True)
 
     if MODEL_RESTORE_PATH is not None:
@@ -253,7 +252,7 @@ if __name__ == '__main__':
 
     lambda_store = np.zeros(BATCH + 1)
     lambda_all = np.zeros(EP_MAX+1)
-    # Adaptive weighting parameters
+    # Set tuning parameter for adaptive regularization weights
     lambda_max = 10
     factor = 0.2
 
@@ -261,6 +260,7 @@ if __name__ == '__main__':
 
     for episode in range(EP_MAX + 1):
 
+        # Baseline reward using only control prior
         s0 = env.reset()
         sp = np.copy(s0)
         reward_prior = 0.
@@ -273,13 +273,13 @@ if __name__ == '__main__':
         
         env.reset()
         s = env.unwrapped.reset(s0)
-        #s = env.reset()
         ep_r, ep_t, ep_a = 0, 0, []
 
         while True:
             a, v = ppo.evaluate_state(s)
             s = np.squeeze(s)[np.newaxis,:]
-            
+
+            # Obtain regularization weight using TD-error
             if (t > 0 and episode > 50):
                 # Obtain TD-error
                 _, base_v = ppo.evaluate_state(s_old)
@@ -320,6 +320,7 @@ if __name__ == '__main__':
             buffer_terminal.append(terminal)
             ep_a.append(a)
 
+            # Roll out control action using mixed policy
             a_prior = prior.getControl_h(s)
             act = a/(1+lambda_mix) + (lambda_mix/(1+lambda_mix))*a_prior
 

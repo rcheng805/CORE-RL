@@ -208,6 +208,7 @@ class TRPO():
         paths = list()
         timesteps = 0
 
+        # Set tuning parameters to obtain adaptive regularization weight
         lambda_store = np.zeros(int(self.args.timesteps_per_batch))
         lambda_max = 8.
         factor = 0.2
@@ -217,6 +218,8 @@ class TRPO():
             self.num_epi += 1
             # print('%d episode starts' % self.num_epi)
             obs, action, rewards, done, action_dist_mu, action_dist_logstd, reward_diff = [], [], [], [], [], [], []
+
+            # Baseline reward using only control prior
             s0 = self.env.reset()
             sp = np.copy(s0)
             reward_prior = 0.
@@ -226,7 +229,7 @@ class TRPO():
                 reward_prior += reward_p
                 if done_p:
                     break
-                
+
             self.env.reset()
             prev_obs = self.env.unwrapped.reset(s0)
             ep_reward = 0.
@@ -234,7 +237,8 @@ class TRPO():
                 # Make 'batch size' axis
                 prev_obs = np.squeeze(prev_obs)
                 prev_obs_expanded = np.expand_dims(prev_obs, 0)
-                # Agent take actions and receives sampled action and action distribution parameters
+                
+                # Obtain regularization weight using TD-error
                 if (i > 0 and self.num_epi > 100):
                     #Obtain TD-error
                     base_v = self.gae.predict(old_obs[np.newaxis,:])
