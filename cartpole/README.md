@@ -1,7 +1,7 @@
-Code to implement CORE-RL algorithm on CartPole Data. In order to set up the environment, you must replace the "cartpole.py" file in your Gym environment, with the "cartpole.py" environment provided here. This file contains the the modified gym environment, so that the control problem has continuous state-action space. 
-All folders contain the following files:
-	(1) prior.py - Synthesize control prior.
-	(2) dynamics.py - Get (crude) dynamics of the system, for synthesizing the control prior.
+Code to implement CORE-RL algorithm on CartPole Data. In order to set up the environment, you must replace the "cartpole.py" file in your Gym environment, with the "cartpole.py" environment provided here. This file contains the the modified gym environment, so that the control problem has continuous state-action space. \
+All folders contain the following files: \
+(1) prior.py - Synthesize control prior. \
+(2) dynamics.py - Get (crude) dynamics of the system, for synthesizing the control prior.
 
 For each of the RL algorithms (DDPG, PPO, TRPO), their folder contains the following code,
 # DDPG folder:
