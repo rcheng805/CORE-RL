@@ -8,5 +8,6 @@ Installation files and instructions for the TORCS simulator can be found at: <ht
 (5) snakeoil3_gym.py - Python script to communicate with TORCS simulator. \
 (6) add_ddpg.py - Run the CORE-RL algorithm with a fixed regularization weight, λ. This can be modified under the comment "Set control prior regularization weight". \
 (7) add_ddpg_adaptive.py - Run the CORE-RL algorithm with an adaptive regularization weight, λ. The hyperparameters for the adaptive strategy are tuned through the variables "factor" and "lambda_max". \
+(8) practiceregcg.xml - Configuration file that sets up the TORCS simulator with the required parameters. It must be placed in the TORCS installation directory. \
  
 TORCS results are output as .log files because the simulator for distinct training runs must be run on individual sockets.
