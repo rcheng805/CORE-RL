@@ -17,6 +17,7 @@ import pprint as pp
 from scipy.io import savemat
 import datetime
 import random
+import sys
 
 from prior import BasePrior
 from dynamics import get_full_dynamics, get_linear_dynamics
@@ -256,7 +257,7 @@ def moving_average(a, n=3) :
 #   Agent Training
 # ===========================
 
-def train(sess, env, args, actor, critic, actor_noise, reward_result):
+def train(sess, env, args, actor, critic, actor_noise, reward_result, lambda_mix):
 
     # Set up summary Ops
     summary_ops, summary_vars = build_summaries()
@@ -289,12 +290,25 @@ def train(sess, env, args, actor, critic, actor_noise, reward_result):
         ep_reward_opt = 0.
         for kk in range(int(args['max_episode_len'])):
             a_prior = prior.getControl_h(s0)
+            a_prior = np.squeeze(np.asarray(a_prior))
             a = a_prior
             s0, r, stop_c, _ = env.step(a)
             ep_reward_opt += r
             if (stop_c):
                 break
-            
+
+        env.reset()
+        sp = env.unwrapped.reset(s)
+
+        reward_lqr = 0.
+        while True:
+            a_lqr = prior.getControl(sp)
+            a_lqr = np.squeeze(np.asarray(a_lqr))
+            sp, reward_p, done_p, _ = env.step(a_lqr)
+            reward_lqr += reward_p
+            if done_p:
+                break
+
         # Get reward using regRL algorithm
         env.reset()
         s = env.unwrapped.reset(s)
@@ -302,11 +316,12 @@ def train(sess, env, args, actor, critic, actor_noise, reward_result):
         for j in range(int(args['max_episode_len'])):
 
             # Set control prior regularization weight
-            lambda_mix = 5.
+            # lambda_mix = 5.
 
             # Prior control
             a_prior = prior.getControl_h(s)
-                
+            a_prior = np.squeeze(np.asarray(a_prior))
+
             # Rl control with exploration noise
             a = actor.predict(np.reshape(s, (1, actor.s_dim))) + actor_noise()
             #a = actor.predict(np.reshape(s, (1, actor.s_dim))) + (1. / (1. + i))
@@ -376,16 +391,16 @@ def train(sess, env, args, actor, critic, actor_noise, reward_result):
                         i, (ep_ave_max_q / float(j))))
                 reward_result[0,i] = ep_reward
                 reward_result[1,i] = ep_reward_opt
+                reward_result[2,i] = reward_lqr
                 path = {"Observation":np.concatenate(obs).reshape((-1,4)),
                         "Action":np.concatenate(action),
 		        "Reward":np.asarray(rewards)}
                 paths.append(path)
-                print(ep_reward)
                 break
 
     return [summary_ops, summary_vars, paths]
 
-def main(args, reward_result):
+def main(args, reward_result, lambda_mix):
 
     with tf.Session() as sess:
 
@@ -412,15 +427,18 @@ def main(args, reward_result):
         
         actor_noise = OrnsteinUhlenbeckActionNoise(mu=np.zeros(action_dim))
 
-        [summary_ops, summary_vars, paths] = train(sess, env, args, actor, critic, actor_noise, reward_result)
+        [summary_ops, summary_vars, paths] = train(sess, env, args, actor, critic, actor_noise, reward_result, lambda_mix)
 
         return [summary_ops, summary_vars, paths]
 
 if __name__ == '__main__':
+
     parser = argparse.ArgumentParser(description='provide arguments for DDPG agent')
     # Set a random seed for each run
     rand_seed = random.randrange(1000000)
     # agent parameters
+    parser.add_argument('--lambda', default=5.0)
+    parser.add_argument('--saveidx', default = 0)
     parser.add_argument('--actor-lr', help='actor network learning rate', default=0.0001)
     parser.add_argument('--critic-lr', help='critic network learning rate', default=0.001)
     parser.add_argument('--gamma', help='discount factor for critic updates', default=0.99)
@@ -445,8 +463,13 @@ if __name__ == '__main__':
     
     pp.pprint(args)
 
-    reward_result = np.zeros((2,int(args['max_episodes'])))
-    [summary_ops, summary_vars, paths] = main(args, reward_result)
+    reward_result = np.zeros((3,int(args['max_episodes'])))
+    save_idx = int(args['saveidx'])
+    lambda_mix = float(args['lambda'])
+    
+    [summary_ops, summary_vars, paths] = main(args, reward_result, lambda_mix)
+
+    savemat('data_prior' + str(int(lambda_mix)) + '_' + str(save_idx) + '.mat',dict(data=paths, reward=reward_result))
 
     # Save learning results to a MATLAB data file
-    savemat('data_prior5_a_' + datetime.datetime.now().strftime("%y-%m-%d-%H-%M") + '.mat',dict(data=paths, reward=reward_result))
+    # savemat('data_prior' + str(int(lambda_mix)) + '_' + str(save_idx) + '_' + datetime.datetime.now().strftime("%y-%m-%d-%H-%M") + '.mat',dict(data=paths, reward=reward_result))

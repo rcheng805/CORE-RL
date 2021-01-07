@@ -20,10 +20,12 @@ from utils import RunningStats, discount, add_histogram
 from dynamics import get_linear_dynamics
 from prior import BasePrior
 from scipy.io import savemat
+import sys
+
 
 OUTPUT_RESULTS_DIR = "./"
 
-EP_MAX = 20000
+EP_MAX = 28000
 GAMMA = 0.98
 LAMBDA = 0.95
 ENTROPY_BETA = 0.0  # 0.01 for discrete, 0.0 for continuous
@@ -130,7 +132,7 @@ class PPO(object):
             self.update_pi_old_op = [oldp.assign(p) for p, oldp in zip(pi_params, pi_old_params)]
             self.update_vf_old_op = [oldp.assign(p) for p, oldp in zip(vf_params, vf_old_params)]
 
-        self.writer = tf.summary.FileWriter(summary_dir, self.sess.graph)
+        # self.writer = tf.summary.FileWriter(summary_dir, self.sess.graph)
         self.sess.run(tf.global_variables_initializer())
 
         tf.summary.scalar("value", tf.reduce_mean(self.v))
@@ -166,7 +168,7 @@ class PPO(object):
 
     def _build_anet(self, state_in, name, reuse=False):
         w_reg = tf.contrib.layers.l2_regularizer(L2_REG)
-
+                
         with tf.variable_scope(name, reuse=reuse):
             if self.cnn:
                 if self.greyscale:
@@ -234,6 +236,19 @@ if __name__ == '__main__':
     # ENVIRONMENT = 'BipedalWalkerHardcore-v2'
     # ENVIRONMENT = 'CarRacing-v0'
 
+    if (len(sys.argv) == 1):
+        lambda_mix = 0.0
+        save_idx = -1
+    elif (len(sys.argv) == 2):
+        lambda_mix = float(sys.argv[1])
+        save_idx = 0
+    elif (len(sys.argv) == 3):
+        lambda_mix = float(sys.argv[1])
+        save_idx = int(sys.argv[2])
+    else:
+        print("Error")
+        exit()
+
     TIMESTAMP = datetime.now().strftime("%Y%m%d-%H%M%S")
     SUMMARY_DIR = os.path.join(OUTPUT_RESULTS_DIR, "PPO", ENVIRONMENT, TIMESTAMP)
 
@@ -251,9 +266,9 @@ if __name__ == '__main__':
     [A,B] = get_linear_dynamics()
     prior = BasePrior(A,B)
     # Set fixed regularization weight
-    lambda_mix = 4.
+    # lambda_mix = 4.
 
-    reward_total, reward_diff = [], []
+    reward_total, reward_diff, reward_lqr_prior, reward_h_prior = [], [], [], []
 
     for episode in range(EP_MAX + 1):
 
@@ -263,11 +278,24 @@ if __name__ == '__main__':
         reward_prior = 0.
         while True:
             a_prior = prior.getControl_h(sp)
+            a_prior = np.squeeze(np.asarray(a_prior))
             sp, reward_p, done_p, _ = env.step(a_prior)
             reward_prior += reward_p
             if done_p:
                 break
-        
+
+        env.reset()
+        sp = env.unwrapped.reset(s0)
+            
+        reward_lqr = 0.
+        while True:
+            a_lqr = prior.getControl(sp)
+            a_lqr = np.squeeze(np.asarray(a_lqr))
+            sp, reward_p, done_p, _ = env.step(a_lqr)
+            reward_lqr += reward_p
+            if done_p:
+                break
+            
         env.reset()
         s = env.unwrapped.reset(s0)
         #s = env.reset()
@@ -275,6 +303,7 @@ if __name__ == '__main__':
 
         while True:
             a, v = ppo.evaluate_state(s)
+            a = np.squeeze(a)
             s = np.squeeze(s)[np.newaxis,:]
 
             # Update ppo
@@ -309,9 +338,10 @@ if __name__ == '__main__':
 
             # Roll out control prior using mixed policy
             a_prior = prior.getControl_h(s)
+            a_prior = np.squeeze(np.asarray(a_prior))
             act = a/(1+lambda_mix) + (lambda_mix/(1+lambda_mix))*a_prior
 
-            #env.render()
+            # env.render()
             
             if not ppo.discrete:
                 act = np.clip(act, env.action_space.low, env.action_space.high)
@@ -324,14 +354,17 @@ if __name__ == '__main__':
 
             if terminal:
                 reward_total.append(ep_r)
+                reward_lqr_prior.append(reward_lqr)
+                reward_h_prior.append(reward_prior)
                 ep_diff = ep_r - reward_prior
                 reward_diff.append(ep_diff)
-                print('Episode: %i' % episode, "| Reward: %.2f" % ep_diff, '| Steps: %i' % ep_t)
+                # print('Episode: %i' % episode, "| Reward: %.2f" % ep_diff, '| Steps: %i' % ep_t)
 
+                '''
                 # End of episode summary
                 worker_summary = tf.Summary()
                 worker_summary.value.add(tag="Reward", simple_value=ep_r)
-
+                
                 # Create Action histograms for each dimension
                 actions = np.array(ep_a)
                 if ppo.discrete:
@@ -346,7 +379,7 @@ if __name__ == '__main__':
                     pass
                 ppo.writer.add_summary(worker_summary, episode)
                 ppo.writer.flush()
-
+                '''
                 # Save the model
                 #if episode % 100 == 0 and episode > 0:
                 #    path = ppo.save_model(SUMMARY_DIR, episode)
@@ -356,7 +389,7 @@ if __name__ == '__main__':
 
     env.close()
 
-    savemat('data4_ppo_v6_' + datetime.now().strftime("%y-%m-%d-%H-%M") + '.mat',dict(data_total=reward_total, data_diff=reward_diff))
+    savemat('data' + str(int(lambda_mix)) + '_ppo_v' + str(save_idx) + '.mat', dict(data_total=reward_total, data_diff=reward_diff, data_lqr=reward_lqr_prior, data_h=reward_h_prior))
 
 
     # Run trained policy
@@ -370,7 +403,9 @@ if __name__ == '__main__':
             #s = np.squeeze(s)[np.newaxis,:]
             s = np.squeeze(s)
             a, v = ppo.evaluate_state(s, stochastic=False)
+            a = np.squeeze(a)
             a_prior = prior.getControl_h(s)
+            a_prior = np.squeeze(np.asarray(a_prior))
             act = a/(1+lambda_mix) + (lambda_mix/(1+lambda_mix))*a_prior
             if not ppo.discrete:
                 act = np.clip(act, env.action_space.low, env.action_space.high)

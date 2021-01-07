@@ -17,7 +17,6 @@ class BasePrior(object):
 
     # Get LQR control (not used in this example)
     def getControl(self, state):
-        print(self.K)
         action = -np.matmul(self.K, np.squeeze(state))
         return action
 
